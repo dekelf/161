@@ -1,248 +1,282 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
+const supabase = require('../supabase-client');
 const { calculatePartA, determineTrack, calculateWithholdingRate } = require('../calculator');
 
 const VALID_STATUSES = ['draft', 'waiting_employee', 'waiting_employer', 'completed', 'rejected'];
 
-// GET all forms with employee info
-router.get('/', (req, res) => {
-  const { status, employee_id } = req.query;
-  let query = `
-    SELECT f.*, e.name as employee_name, e.id_number, e.employer, e.is_controlling_shareholder
-    FROM forms f JOIN employees e ON e.id = f.employee_id
-  `;
-  const params = [];
-  const conditions = [];
-  if (status) { conditions.push('f.status = ?'); params.push(status); }
-  if (employee_id) { conditions.push('f.employee_id = ?'); params.push(employee_id); }
-  if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
-  query += ' ORDER BY f.created_at DESC';
-  res.json(db.prepare(query).all(...params));
+router.get('/', async (req, res) => {
+  try {
+    const { status, employee_id } = req.query;
+    let q = supabase
+      .from('forms')
+      .select('*, employees(name, id_number, employer, is_controlling_shareholder)')
+      .order('created_at', { ascending: false });
+    if (status) q = q.eq('status', status);
+    if (employee_id) q = q.eq('employee_id', employee_id);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    const rows = (data || []).map(f => {
+      const emp = f.employees || {};
+      const { employees: _, ...rest } = f;
+      return { ...rest, employee_name: emp.name, id_number: emp.id_number, employer: emp.employer, is_controlling_shareholder: emp.is_controlling_shareholder };
+    });
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// GET single form with full details
-router.get('/:id', (req, res) => {
-  const form = db.prepare(`
-    SELECT f.*, e.name as employee_name, e.id_number, e.employer, e.employer_id,
-           e.start_date, e.end_date, e.is_controlling_shareholder
-    FROM forms f JOIN employees e ON e.id = f.employee_id
-    WHERE f.id = ?
-  `).get(req.params.id);
-  if (!form) return res.status(404).json({ error: 'לא נמצא' });
+router.get('/:id', async (req, res) => {
+  try {
+    const { data: form, error } = await supabase
+      .from('forms')
+      .select('*, employees(name, id_number, employer, employer_id, start_date, end_date, is_controlling_shareholder)')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !form) return res.status(404).json({ error: 'לא נמצא' });
 
-  const signatures = db.prepare('SELECT * FROM signatures WHERE form_id = ? ORDER BY signer_type').all(req.params.id);
-  const pension_funds = db.prepare('SELECT * FROM pension_funds WHERE form_id = ? ORDER BY fund_name').all(req.params.id);
-  const documents = db.prepare('SELECT id, original_name, doc_type, size, uploaded_at FROM documents WHERE form_id = ?').all(req.params.id);
-  const audit = db.prepare('SELECT * FROM audit_log WHERE form_id = ? ORDER BY performed_at DESC LIMIT 30').all(req.params.id);
+    const [sigsRes, fundsRes, auditRes] = await Promise.all([
+      supabase.from('signatures').select('*').eq('form_id', req.params.id).order('signer_type'),
+      supabase.from('pension_funds').select('*').eq('form_id', req.params.id).order('fund_name'),
+      supabase.from('audit_log').select('*').eq('form_id', req.params.id).order('performed_at', { ascending: false }).limit(30),
+    ]);
 
-  res.json({ ...form, signatures, pension_funds, documents, audit });
+    const emp = form.employees || {};
+    const { employees: _, ...rest } = form;
+    res.json({
+      ...rest,
+      employee_name: emp.name, id_number: emp.id_number, employer: emp.employer,
+      employer_id: emp.employer_id, start_date: emp.start_date, end_date: emp.end_date,
+      is_controlling_shareholder: emp.is_controlling_shareholder,
+      signatures: sigsRes.data || [],
+      pension_funds: fundsRes.data || [],
+      audit: auditRes.data || [],
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// POST create form
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { employee_id } = req.body;
   if (!employee_id) return res.status(400).json({ error: 'employee_id חסר' });
 
-  const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(employee_id);
-  if (!employee) return res.status(404).json({ error: 'עובד לא נמצא' });
+  try {
+    const { data: employee } = await supabase.from('employees').select('*').eq('id', employee_id).single();
+    if (!employee) return res.status(404).json({ error: 'עובד לא נמצא' });
 
-  // Prevent duplicate active forms
-  const activeForm = db.prepare(`
-    SELECT id FROM forms WHERE employee_id = ? AND status NOT IN ('rejected','completed')
-  `).get(employee_id);
-  if (activeForm) {
-    return res.status(409).json({ error: 'קיים טופס פעיל לעובד זה', existing_id: activeForm.id });
+    const { data: activeForm } = await supabase
+      .from('forms').select('id').eq('employee_id', employee_id)
+      .in('status', ['draft', 'waiting_employee', 'waiting_employer'])
+      .maybeSingle();
+    if (activeForm)
+      return res.status(409).json({ error: 'קיים טופס פעיל לעובד זה', existing_id: activeForm.id });
+
+    const id = uuidv4();
+    const form_number = 'F161-' + Date.now().toString().slice(-7);
+
+    const { error } = await supabase.from('forms').insert({ id, employee_id, form_number });
+    if (error) throw error;
+
+    await supabase.from('signatures').insert([
+      { id: uuidv4(), form_id: id, signer_type: 'employee' },
+      { id: uuidv4(), form_id: id, signer_type: 'employer' },
+    ]);
+
+    await logAudit(id, 'created', 'טופס נוצר');
+    res.status(201).json({ id, form_number });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  const id = uuidv4();
-  const form_number = 'F161-' + Date.now().toString().slice(-7);
-
-  db.prepare(`INSERT INTO forms (id, employee_id, form_number) VALUES (?, ?, ?)`).run(id, employee_id, form_number);
-
-  // Create signature slots
-  ['employee', 'employer'].forEach(t =>
-    db.prepare('INSERT INTO signatures (id, form_id, signer_type) VALUES (?,?,?)').run(uuidv4(), id, t)
-  );
-
-  logAudit(id, 'created', 'טופס נוצר');
-  res.status(201).json({ id, form_number });
 });
 
-// PATCH — update form fields (Part A / Part B / status)
-router.patch('/:id', (req, res) => {
-  const form = db.prepare('SELECT * FROM forms WHERE id = ?').get(req.params.id);
-  if (!form) return res.status(404).json({ error: 'לא נמצא' });
+router.patch('/:id', async (req, res) => {
+  try {
+    const { data: form } = await supabase.from('forms').select('*').eq('id', req.params.id).single();
+    if (!form) return res.status(404).json({ error: 'לא נמצא' });
 
-  const { status, ...fields } = req.body;
+    const { status, ...fields } = req.body;
+    if (status && !VALID_STATUSES.includes(status))
+      return res.status(400).json({ error: 'סטטוס לא תקין' });
 
-  if (status && !VALID_STATUSES.includes(status)) {
-    return res.status(400).json({ error: 'סטטוס לא תקין' });
+    const allowed = [
+      'last_salary','last_insured_salary','severance_obligation_salary',
+      'seniority_years','seniority_years_effective','termination_reason',
+      'employer_grant','capital_severance',
+      'pension_severance_taxed_nominal','pension_severance_taxed_real','pension_severance_untaxed',
+      'pre_retirement_pension','pre_retirement_pension_factor','has_budget_pension',
+      'part_b_required','part_b_filled',
+      'elect_exempt_grant','elect_taxable_grant','elect_severance_continuation','elect_pension_continuation',
+      'decl_no_parallel_employer','decl_no_prior_continuation','decl_no_entitlement_age',
+      'part_c_alternative','part_c_tax_rate','part_c_notes','notes',
+    ];
+
+    const updates = { updated_at: new Date().toISOString() };
+    for (const k of allowed) {
+      if (k in fields) updates[k] = fields[k];
+    }
+    if (status) updates.status = status;
+
+    const { error } = await supabase.from('forms').update(updates).eq('id', req.params.id);
+    if (error) throw error;
+
+    const financialKeys = ['last_salary','last_insured_salary','severance_obligation_salary',
+      'seniority_years_effective','employer_grant','capital_severance',
+      'pension_severance_taxed_nominal','pension_severance_taxed_real','pension_severance_untaxed',
+      'pre_retirement_pension'];
+
+    let updatedForm;
+    if (financialKeys.some(k => k in fields)) {
+      await recalculate(req.params.id);
+    }
+    const { data: fresh } = await supabase.from('forms').select('*').eq('id', req.params.id).single();
+    updatedForm = fresh;
+
+    if (status) await logAudit(req.params.id, 'status_changed', `${form.status} → ${status}`);
+    res.json({ success: true, form: updatedForm });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  // Build dynamic UPDATE
-  const allowed = [
-    'last_salary','last_insured_salary','severance_obligation_salary',
-    'seniority_years','seniority_years_effective','termination_reason',
-    'employer_grant','capital_severance',
-    'pension_severance_taxed_nominal','pension_severance_taxed_real','pension_severance_untaxed',
-    'pre_retirement_pension','pre_retirement_pension_factor','has_budget_pension',
-    'part_b_required','part_b_filled',
-    'elect_exempt_grant','elect_taxable_grant','elect_severance_continuation','elect_pension_continuation',
-    'decl_no_parallel_employer','decl_no_prior_continuation','decl_no_entitlement_age',
-    'part_c_alternative','part_c_tax_rate','part_c_notes',
-    'notes',
-  ];
-
-  const updates = {};
-  for (const k of allowed) {
-    if (k in fields) updates[k] = fields[k];
-  }
-  if (status) updates.status = status;
-  updates.updated_at = "datetime('now')";
-
-  if (Object.keys(updates).length) {
-    const sets = Object.keys(updates).map(k =>
-      k === 'updated_at' ? `updated_at=datetime('now')` : `${k}=?`
-    ).join(', ');
-    const vals = Object.entries(updates)
-      .filter(([k]) => k !== 'updated_at')
-      .map(([, v]) => v);
-    db.prepare(`UPDATE forms SET ${sets} WHERE id=?`).run(...vals, req.params.id);
-  }
-
-  // Recalculate Part A if financial data changed
-  const financialKeys = ['last_salary','last_insured_salary','severance_obligation_salary',
-    'seniority_years_effective','employer_grant','capital_severance',
-    'pension_severance_taxed_nominal','pension_severance_taxed_real','pension_severance_untaxed',
-    'pre_retirement_pension'];
-
-  const shouldRecalc = financialKeys.some(k => k in fields);
-  if (shouldRecalc) {
-    recalculate(req.params.id);
-  }
-
-  if (status) logAudit(req.params.id, 'status_changed', `${form.status} → ${status}`);
-
-  const updated = db.prepare('SELECT * FROM forms WHERE id = ?').get(req.params.id);
-  res.json({ success: true, form: updated });
 });
 
-// POST trigger recalculation
-router.post('/:id/calculate', (req, res) => {
-  const result = recalculate(req.params.id);
-  if (!result) return res.status(404).json({ error: 'לא נמצא' });
-  res.json(result);
+router.post('/:id/calculate', async (req, res) => {
+  try {
+    const result = await recalculate(req.params.id);
+    if (!result) return res.status(404).json({ error: 'לא נמצא' });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// POST sign
-router.post('/:id/sign', (req, res) => {
+router.post('/:id/sign', async (req, res) => {
   const { signer_type, signer_name } = req.body;
-  if (!['employee', 'employer'].includes(signer_type)) {
+  if (!['employee', 'employer'].includes(signer_type))
     return res.status(400).json({ error: 'סוג חותם לא תקין' });
+
+  try {
+    const { data: sig } = await supabase
+      .from('signatures').select('*').eq('form_id', req.params.id).eq('signer_type', signer_type).single();
+    if (!sig) return res.status(404).json({ error: 'לא נמצא' });
+    if (sig.is_signed) return res.status(409).json({ error: 'כבר חתום' });
+
+    await supabase.from('signatures').update({
+      is_signed: true,
+      signer_name: signer_name || null,
+      signed_at: new Date().toISOString(),
+    }).eq('form_id', req.params.id).eq('signer_type', signer_type);
+
+    await logAudit(req.params.id, 'signed', `${signer_type} חתם — ${signer_name || ''}`);
+
+    const { data: formData } = await supabase.from('forms').select('status').eq('id', req.params.id).single();
+    let nextStatus = formData.status;
+    if (signer_type === 'employee' && formData.status === 'waiting_employee') nextStatus = 'waiting_employer';
+
+    const { data: allSigs } = await supabase.from('signatures').select('is_signed').eq('form_id', req.params.id);
+    if (allSigs && allSigs.every(s => s.is_signed)) nextStatus = 'completed';
+
+    if (nextStatus !== formData.status) {
+      await supabase.from('forms').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', req.params.id);
+      await logAudit(req.params.id, 'status_changed', `${formData.status} → ${nextStatus}`);
+    }
+
+    res.json({ success: true, new_status: nextStatus });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  const sig = db.prepare('SELECT * FROM signatures WHERE form_id=? AND signer_type=?').get(req.params.id, signer_type);
-  if (!sig) return res.status(404).json({ error: 'לא נמצא' });
-  if (sig.is_signed) return res.status(409).json({ error: 'כבר חתום' });
-
-  db.prepare(`UPDATE signatures SET is_signed=1, signer_name=?, signed_at=datetime('now') WHERE form_id=? AND signer_type=?`)
-    .run(signer_name || null, req.params.id, signer_type);
-
-  logAudit(req.params.id, 'signed', `${signer_type} חתם — ${signer_name || ''}`);
-
-  // Auto-advance status
-  const form = db.prepare('SELECT status FROM forms WHERE id=?').get(req.params.id);
-  let nextStatus = form.status;
-  if (signer_type === 'employee' && form.status === 'waiting_employee') nextStatus = 'waiting_employer';
-
-  const allSigs = db.prepare('SELECT is_signed FROM signatures WHERE form_id=?').all(req.params.id);
-  if (allSigs.every(s => s.is_signed)) nextStatus = 'completed';
-
-  if (nextStatus !== form.status) {
-    db.prepare("UPDATE forms SET status=?, updated_at=datetime('now') WHERE id=?").run(nextStatus, req.params.id);
-    logAudit(req.params.id, 'status_changed', `${form.status} → ${nextStatus}`);
-  }
-
-  res.json({ success: true, new_status: nextStatus });
 });
 
-// POST add pension fund
-router.post('/:id/funds', (req, res) => {
+router.post('/:id/funds', async (req, res) => {
   const { fund_name, fund_type, account_number, taxed_severance, untaxed_severance, employee_deposits, employer_deposits, contact_email } = req.body;
   if (!fund_name || !fund_type) return res.status(400).json({ error: 'שם וסוג קרן חובה' });
 
-  // No duplicates per form+fund_name
-  const exists = db.prepare('SELECT id FROM pension_funds WHERE form_id=? AND fund_name=?').get(req.params.id, fund_name);
-  if (exists) return res.status(409).json({ error: 'קרן עם שם זה כבר קיימת בטופס' });
+  try {
+    const { data: exists } = await supabase
+      .from('pension_funds').select('id').eq('form_id', req.params.id).eq('fund_name', fund_name).maybeSingle();
+    if (exists) return res.status(409).json({ error: 'קרן עם שם זה כבר קיימת בטופס' });
 
-  const id = uuidv4();
-  db.prepare(`INSERT INTO pension_funds (id,form_id,fund_name,fund_type,account_number,taxed_severance,untaxed_severance,employee_deposits,employer_deposits,contact_email)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, req.params.id, fund_name, fund_type, account_number||null, taxed_severance||0, untaxed_severance||0, employee_deposits||0, employer_deposits||0, contact_email||null);
-
-  // Recalculate since severance totals may have changed
-  recalculate(req.params.id);
-
-  res.status(201).json({ id });
+    const id = uuidv4();
+    const { error } = await supabase.from('pension_funds').insert({
+      id, form_id: req.params.id, fund_name, fund_type,
+      account_number: account_number || null,
+      taxed_severance: taxed_severance || 0,
+      untaxed_severance: untaxed_severance || 0,
+      employee_deposits: employee_deposits || 0,
+      employer_deposits: employer_deposits || 0,
+      contact_email: contact_email || null,
+    });
+    if (error) throw error;
+    await recalculate(req.params.id);
+    res.status(201).json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// PATCH update fund instruction
-router.patch('/:form_id/funds/:fund_id', (req, res) => {
-  const { instruction, instruction_amount, instruction_tax_rate } = req.body;
-  db.prepare(`UPDATE pension_funds SET instruction=?, instruction_amount=?, instruction_tax_rate=? WHERE id=? AND form_id=?`)
-    .run(instruction||null, instruction_amount||null, instruction_tax_rate||null, req.params.fund_id, req.params.form_id);
-  res.json({ success: true });
+router.patch('/:form_id/funds/:fund_id', async (req, res) => {
+  try {
+    const { instruction, instruction_amount, instruction_tax_rate } = req.body;
+    const { error } = await supabase.from('pension_funds').update({
+      instruction: instruction || null,
+      instruction_amount: instruction_amount || null,
+      instruction_tax_rate: instruction_tax_rate || null,
+    }).eq('id', req.params.fund_id).eq('form_id', req.params.form_id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// DELETE fund
-router.delete('/:form_id/funds/:fund_id', (req, res) => {
-  db.prepare('DELETE FROM pension_funds WHERE id=? AND form_id=?').run(req.params.fund_id, req.params.form_id);
-  recalculate(req.params.form_id);
-  res.json({ success: true });
+router.delete('/:form_id/funds/:fund_id', async (req, res) => {
+  try {
+    const { error } = await supabase.from('pension_funds').delete()
+      .eq('id', req.params.fund_id).eq('form_id', req.params.form_id);
+    if (error) throw error;
+    await recalculate(req.params.form_id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ——— helpers ———
-
-function recalculate(formId) {
-  const form = db.prepare('SELECT * FROM forms WHERE id=?').get(formId);
+async function recalculate(formId) {
+  const { data: form } = await supabase.from('forms').select('*').eq('id', formId).single();
   if (!form) return null;
-  const employee = db.prepare('SELECT * FROM employees WHERE id=?').get(form.employee_id);
 
-  // Sum severance from pension funds if individual fields not filled
-  const funds = db.prepare('SELECT * FROM pension_funds WHERE form_id=?').all(formId);
-  const fundTaxed = funds.reduce((a, f) => a + (f.taxed_severance || 0), 0);
-  const fundUntaxed = funds.reduce((a, f) => a + (f.untaxed_severance || 0), 0);
+  const { data: employee } = await supabase.from('employees').select('*').eq('id', form.employee_id).single();
+  const { data: funds } = await supabase.from('pension_funds').select('*').eq('form_id', formId);
+
+  const fundTaxed = (funds || []).reduce((a, f) => a + (f.taxed_severance || 0), 0);
+  const fundUntaxed = (funds || []).reduce((a, f) => a + (f.untaxed_severance || 0), 0);
 
   const calcInput = {
     ...form,
-    is_controlling_shareholder: employee.is_controlling_shareholder,
+    is_controlling_shareholder: employee?.is_controlling_shareholder || false,
     pension_severance_taxed_nominal: form.pension_severance_taxed_nominal || fundTaxed,
     pension_severance_untaxed: form.pension_severance_untaxed || fundUntaxed,
   };
 
   const calcs = calculatePartA(calcInput);
-  const { track, alternative, reason } = determineTrack({ ...form, ...calcs }, employee);
+  const { track, alternative, reason } = determineTrack({ ...form, ...calcs }, employee || {});
   const taxRate = track === 'green' ? calculateWithholdingRate({ ...form, ...calcs }) : null;
 
-  db.prepare(`UPDATE forms SET
-    calc_total_grant=?, calc_max_pension_continuation=?, calc_max_severance_continuation=?,
-    calc_max_exempt_grant=?, calc_estimated_taxable=?, calc_exempt_ceiling_2024=?,
-    track=?, track_reason=?, part_c_alternative=?, part_c_tax_rate=?,
-    updated_at=datetime('now') WHERE id=?
-  `).run(
-    calcs.calc_total_grant, calcs.calc_max_pension_continuation, calcs.calc_max_severance_continuation,
-    calcs.calc_max_exempt_grant, calcs.calc_estimated_taxable, calcs.calc_exempt_ceiling_2024,
-    track, reason, alternative, taxRate,
-    formId
-  );
+  await supabase.from('forms').update({
+    ...calcs,
+    track, track_reason: reason, part_c_alternative: alternative, part_c_tax_rate: taxRate,
+    updated_at: new Date().toISOString(),
+  }).eq('id', formId);
 
-  logAudit(formId, 'calculated', `מסלול: ${track === 'green' ? 'ירוק' : 'אדום'} (${alternative})`);
+  await logAudit(formId, 'calculated', `מסלול: ${track === 'green' ? 'ירוק' : 'אדום'} (${alternative})`);
   return { ...calcs, track, alternative, reason };
 }
 
-function logAudit(form_id, action, details) {
-  db.prepare('INSERT INTO audit_log (id,form_id,action,details) VALUES (?,?,?,?)').run(uuidv4(), form_id, action, details);
+async function logAudit(form_id, action, details) {
+  await supabase.from('audit_log').insert({ form_id, action, details });
 }
 
 module.exports = router;

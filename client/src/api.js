@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: 'http://localhost:3001/api' });
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const api = axios.create({ baseURL: API_BASE });
 
 export const employees = {
   list: () => api.get('/employees'),
@@ -24,7 +25,7 @@ export const forms = {
 export const letters = {
   generateAll: (formId) => api.post(`/letters/${formId}/generate`),
   generateOne: (formId, fundId) => api.post(`/letters/${formId}/generate/${fundId}`),
-  downloadUrl: (formId, filename) => `http://localhost:3001/api/letters/${formId}/download/${filename}`,
+  downloadUrl: (formId, filename) => `${API_BASE}/letters/${formId}/download/${filename}`,
   send: (formId, data) => api.post(`/letters/${formId}/send`, data),
 };
 
@@ -35,7 +36,7 @@ export const documents = {
     fd.append('doc_type', doc_type || 'other');
     return api.post(`/documents/${form_id}/upload`, fd);
   },
-  download: (doc_id) => `http://localhost:3001/api/documents/file/${doc_id}`,
+  download: (doc_id) => `${API_BASE}/documents/file/${doc_id}`,
   delete: (doc_id) => api.delete(`/documents/file/${doc_id}`),
 };
 
