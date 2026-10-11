@@ -3,9 +3,9 @@
  * Based on Israeli Income Tax Ordinance Section 9(7a) and related regulations
  */
 
-// Tax authority ceilings (updated annually) — 2024 values
+// Tax authority ceilings (updated annually) — 2026 values
 const TAX_CEILINGS = {
-  exemptGrantPerYear: 13_310,      // תקרת מענק פטור לשנת עבודה (₪) — 2024
+  exemptGrantPerYear: 13_750,      // תקרת מענק פטור לשנת עבודה (₪) — 2026
   insuredSalaryMax: 45_000,        // תקרת משכורת מבוטחת למסלול ירוק
   avgMarketSalaryMonthly: 12_548,  // שכר ממוצע במשק לחודש — 2024
 };
