@@ -14,7 +14,11 @@ export const forms = {
   get: (id) => api.get(`/forms/${id}`),
   create: (data) => api.post('/forms', data),
   update: (id, data) => api.patch(`/forms/${id}`, data),
+  calculate: (id) => api.post(`/forms/${id}/calculate`),
   sign: (id, data) => api.post(`/forms/${id}/sign`, data),
+  addFund: (id, data) => api.post(`/forms/${id}/funds`, data),
+  updateFund: (formId, fundId, data) => api.patch(`/forms/${formId}/funds/${fundId}`, data),
+  deleteFund: (formId, fundId) => api.delete(`/forms/${formId}/funds/${fundId}`),
 };
 
 export const documents = {

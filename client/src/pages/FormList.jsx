@@ -3,8 +3,19 @@ import { Link } from 'react-router-dom';
 import { forms } from '../api';
 
 const STATUS_LABELS = {
-  draft: 'טיוטה', pending_employee: 'ממתין לעובד', pending_employer: 'ממתין למעסיק',
-  pending_fund: 'ממתין לקרן', signed: 'חתום', rejected: 'נדחה', completed: 'הושלם',
+  draft: 'טיוטה',
+  waiting_employee: 'ממתין לעובד',
+  waiting_employer: 'ממתין למעסיק',
+  completed: 'הושלם',
+  rejected: 'נדחה',
+};
+
+const STATUS_CSS = {
+  draft: 'badge-draft',
+  waiting_employee: 'badge-pending_employee',
+  waiting_employer: 'badge-pending_employer',
+  completed: 'badge-completed',
+  rejected: 'badge-rejected',
 };
 
 export default function FormList() {
@@ -29,7 +40,7 @@ export default function FormList() {
 
       <div className="card" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div className="form-group" style={{ flex: 1, minWidth: 200, marginBottom: 0 }}>
-          <input placeholder="חיפוש..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input placeholder="חיפוש לפי שם עובד, מספר טופס, מעסיק..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
@@ -47,7 +58,8 @@ export default function FormList() {
                 <th>מספר טופס</th>
                 <th>עובד</th>
                 <th>מעסיק</th>
-                <th>קרן פנסיה</th>
+                <th>מסלול</th>
+                <th>חלופה</th>
                 <th>סטטוס</th>
                 <th>תאריך</th>
                 <th></th>
@@ -55,14 +67,15 @@ export default function FormList() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: '#888', padding: 32 }}>אין טפסים</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#888', padding: 32 }}>אין טפסים</td></tr>
               ) : filtered.map(f => (
                 <tr key={f.id}>
                   <td>{f.form_number}</td>
                   <td>{f.employee_name}</td>
                   <td>{f.employer}</td>
-                  <td>{f.pension_fund || '—'}</td>
-                  <td><span className={`badge badge-${f.status}`}>{STATUS_LABELS[f.status]}</span></td>
+                  <td style={{ textAlign: 'center' }}>{f.track === 'green' ? '🟢' : f.track === 'red' ? '🔴' : '—'}</td>
+                  <td style={{ fontSize: '0.85rem', color: '#666' }}>{f.part_c_alternative || '—'}</td>
+                  <td><span className={`badge ${STATUS_CSS[f.status] || 'badge-draft'}`}>{STATUS_LABELS[f.status]}</span></td>
                   <td>{new Date(f.created_at).toLocaleDateString('he-IL')}</td>
                   <td><Link to={`/forms/${f.id}`} className="btn btn-sm btn-outline">פתח</Link></td>
                 </tr>

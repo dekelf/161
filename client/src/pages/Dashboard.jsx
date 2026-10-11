@@ -4,12 +4,18 @@ import { forms, employees } from '../api';
 
 const STATUS_LABELS = {
   draft: 'טיוטה',
-  pending_employee: 'ממתין לחתימת עובד',
-  pending_employer: 'ממתין לחתימת מעסיק',
-  pending_fund: 'ממתין לאישור קרן',
-  signed: 'חתום',
-  rejected: 'נדחה',
+  waiting_employee: 'ממתין לחתימת עובד',
+  waiting_employer: 'ממתין לחתימת מעסיק',
   completed: 'הושלם',
+  rejected: 'נדחה',
+};
+
+const STATUS_CSS = {
+  draft: 'badge-draft',
+  waiting_employee: 'badge-pending_employee',
+  waiting_employer: 'badge-pending_employer',
+  completed: 'badge-completed',
+  rejected: 'badge-rejected',
 };
 
 export default function Dashboard() {
@@ -22,15 +28,13 @@ export default function Dashboard() {
       const counts = {};
       allForms.forEach(f => { counts[f.status] = (counts[f.status] || 0) + 1; });
       setStats({ total: allForms.length, employees: eRes.data.length, counts });
-      setRecent(allForms.slice(0, 8));
+      setRecent(allForms.slice(0, 10));
     });
   }, []);
 
-  if (!stats) return <div>טוען...</div>;
+  if (!stats) return <div style={{ padding: 32, color: '#888' }}>טוען...</div>;
 
-  const active = Object.entries(stats.counts)
-    .filter(([s]) => !['completed', 'rejected'].includes(s))
-    .reduce((a, [, v]) => a + v, 0);
+  const active = (stats.counts.waiting_employee || 0) + (stats.counts.waiting_employer || 0) + (stats.counts.draft || 0);
 
   return (
     <div>
@@ -56,10 +60,10 @@ export default function Dashboard() {
       {Object.keys(stats.counts).length > 0 && (
         <div className="card" style={{ marginBottom: 24 }}>
           <div className="card-title">פילוח לפי סטטוס</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
             {Object.entries(stats.counts).map(([status, count]) => (
               <div key={status} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span className={`badge badge-${status}`}>{STATUS_LABELS[status] || status}</span>
+                <span className={`badge ${STATUS_CSS[status] || 'badge-draft'}`}>{STATUS_LABELS[status] || status}</span>
                 <span style={{ fontWeight: 700 }}>{count}</span>
               </div>
             ))}
@@ -70,7 +74,7 @@ export default function Dashboard() {
       <div className="card">
         <div className="card-title">טפסים אחרונים</div>
         {recent.length === 0 ? (
-          <p style={{ color: '#888' }}>אין טפסים עדיין. <Link to="/forms/new">צור טופס ראשון</Link></p>
+          <p style={{ color: '#888' }}>אין טפסים. <Link to="/forms/new">צרי טופס ראשון</Link></p>
         ) : (
           <div className="table-wrap">
             <table>
@@ -79,6 +83,7 @@ export default function Dashboard() {
                   <th>מספר טופס</th>
                   <th>עובד</th>
                   <th>מעסיק</th>
+                  <th>מסלול</th>
                   <th>סטטוס</th>
                   <th>תאריך</th>
                   <th></th>
@@ -90,7 +95,10 @@ export default function Dashboard() {
                     <td>{f.form_number}</td>
                     <td>{f.employee_name}</td>
                     <td>{f.employer}</td>
-                    <td><span className={`badge badge-${f.status}`}>{STATUS_LABELS[f.status]}</span></td>
+                    <td>
+                      {f.track === 'green' ? '🟢' : f.track === 'red' ? '🔴' : '—'}
+                    </td>
+                    <td><span className={`badge ${STATUS_CSS[f.status] || 'badge-draft'}`}>{STATUS_LABELS[f.status]}</span></td>
                     <td>{new Date(f.created_at).toLocaleDateString('he-IL')}</td>
                     <td><Link to={`/forms/${f.id}`} className="btn btn-sm btn-outline">פתח</Link></td>
                   </tr>

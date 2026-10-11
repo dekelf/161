@@ -6,7 +6,7 @@ export default function EmployeeForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
-  const [form, setForm] = useState({ name: '', id_number: '', employer: '', employer_id: '', start_date: '', end_date: '' });
+  const [form, setForm] = useState({ name: '', id_number: '', employer: '', employer_id: '', start_date: '', end_date: '', is_controlling_shareholder: 0 });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -73,6 +73,12 @@ export default function EmployeeForm() {
               <label>תאריך סיום עבודה</label>
               <input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} />
             </div>
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!form.is_controlling_shareholder} onChange={e => set('is_controlling_shareholder', e.target.checked ? 1 : 0)} />
+              בעל שליטה / קרוב של בעל שליטה (מסלול אדום אוטומטי)
+            </label>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'שומר...' : 'שמור'}</button>
