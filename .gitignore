@@ -1,8 +1,27 @@
+# dependencies
 node_modules/
 client/node_modules/
 server/node_modules/
-server/data/
-dist/
+
+# database & local data
+server/data/form161.db
+server/data/form161.db-shm
+server/data/form161.db-wal
+server/data/uploads/
+server/data/letters/
+
+# build output
 client/dist/
+
+# env files
 .env
-*.local
+.env.local
+.env.*.local
+
+# logs
+npm-debug.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

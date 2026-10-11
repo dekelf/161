@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { forms, documents } from '../api';
+import { forms, documents, letters } from '../api';
 
 const STATUS_LABELS = {
   draft: 'טיוטה',
@@ -39,6 +39,10 @@ export default function FormDetail() {
   const [signerName, setSignerName] = useState('');
   const [showAddFund, setShowAddFund] = useState(false);
   const [newFund, setNewFund] = useState({ fund_name: '', fund_type: 'pension_policy', account_number: '', taxed_severance: '', untaxed_severance: '', contact_email: '' });
+  const [generatingLetters, setGeneratingLetters] = useState(false);
+  const [generatedLetters, setGeneratedLetters] = useState([]);
+  const [showSendPanel, setShowSendPanel] = useState(false);
+  const [sendConfig, setSendConfig] = useState({ host: '', port: '587', user: '', pass: '', recipients: '' });
   const fileRef = useRef();
 
   // Editable Part A fields
@@ -126,6 +130,31 @@ export default function FormDetail() {
     try { await documents.upload(id, file, 'form161'); setMsg('קובץ הועלה'); reload(); }
     catch { setError('שגיאה בהעלאה'); }
     e.target.value = '';
+  }
+
+  async function generateAllLetters() {
+    setGeneratingLetters(true); setError(''); setMsg('');
+    try {
+      const r = await letters.generateAll(id);
+      setGeneratedLetters(r.data.generated);
+      setMsg(`הופקו ${r.data.generated.length} מכתב/י שחרור`);
+    } catch (e) { setError(e.response?.data?.error || 'שגיאה בהפקת מכתבים'); }
+    finally { setGeneratingLetters(false); }
+  }
+
+  async function sendLetters() {
+    const recipients = sendConfig.recipients.split(/[\n,]/).map(s => s.trim()).filter(Boolean)
+      .map(email => ({ email }));
+    if (!recipients.length) { setError('יש להזין כתובת מייל לפחות אחת'); return; }
+    setError(''); setMsg('');
+    try {
+      const r = await letters.send(id, {
+        smtp: { host: sendConfig.host, port: Number(sendConfig.port), user: sendConfig.user, pass: sendConfig.pass },
+        recipients,
+      });
+      setMsg(`נשלחו ${r.data.sent.length} הודעות עם ${r.data.letters} קובצי PDF`);
+      setShowSendPanel(false);
+    } catch (e) { setError(e.response?.data?.error || 'שגיאה בשליחה'); }
   }
 
   const sf = (k) => (v) => setPartA(p => ({ ...p, [k]: v }));
@@ -469,6 +498,72 @@ export default function FormDetail() {
                   </div>
                 )}
               </>
+            )}
+          </div>
+
+          {/* Release Letters */}
+          <div className="card">
+            <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>מכתבי שחרור PDF</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {data.pension_funds.some(f => f.instruction) && (
+                  <button className="btn btn-primary btn-sm" onClick={generateAllLetters} disabled={generatingLetters}>
+                    {generatingLetters ? 'מפיק...' : '📄 הפק מכתבים'}
+                  </button>
+                )}
+                {generatedLetters.length > 0 && (
+                  <button className="btn btn-outline btn-sm" onClick={() => setShowSendPanel(!showSendPanel)}>
+                    📧 שלח במייל
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {data.pension_funds.every(f => !f.instruction) ? (
+              <p style={{ color: '#888', fontSize: '0.9rem' }}>יש להגדיר הנחיה לפחות לקרן אחת</p>
+            ) : generatedLetters.length === 0 ? (
+              <p style={{ color: '#888', fontSize: '0.9rem' }}>לחצי "הפק מכתבים" לייצור מכתבי שחרור PDF לכל קרן</p>
+            ) : (
+              <div>
+                {generatedLetters.map(l => (
+                  <div key={l.fund_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    <span style={{ fontSize: '0.9rem' }}>📄 {l.fund_name}</span>
+                    <a href={`http://localhost:3001${l.url}`} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline">הורד PDF</a>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showSendPanel && (
+              <div style={{ marginTop: 16, padding: 16, background: '#f8f9fa', borderRadius: 8 }}>
+                <div style={{ fontWeight: 600, marginBottom: 12 }}>שליחת מכתבים במייל</div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label>שרת SMTP</label>
+                    <input placeholder="smtp.gmail.com" value={sendConfig.host} onChange={e => setSendConfig(c => ({ ...c, host: e.target.value }))} dir="ltr" />
+                  </div>
+                  <div className="form-group">
+                    <label>פורט</label>
+                    <input type="number" value={sendConfig.port} onChange={e => setSendConfig(c => ({ ...c, port: e.target.value }))} dir="ltr" />
+                  </div>
+                  <div className="form-group">
+                    <label>שם משתמש / מייל שולח</label>
+                    <input type="email" value={sendConfig.user} onChange={e => setSendConfig(c => ({ ...c, user: e.target.value }))} dir="ltr" />
+                  </div>
+                  <div className="form-group">
+                    <label>סיסמה / App Password</label>
+                    <input type="password" value={sendConfig.pass} onChange={e => setSendConfig(c => ({ ...c, pass: e.target.value }))} dir="ltr" />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>נמענים (כתובות מייל, מופרדות בפסיק או שורות)</label>
+                  <textarea rows={3} dir="ltr" placeholder="fund@example.com, agent@example.com" value={sendConfig.recipients} onChange={e => setSendConfig(c => ({ ...c, recipients: e.target.value }))} />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-primary" onClick={sendLetters}>שלח</button>
+                  <button className="btn btn-outline" onClick={() => setShowSendPanel(false)}>ביטול</button>
+                </div>
+              </div>
             )}
           </div>
 

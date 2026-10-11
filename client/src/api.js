@@ -21,6 +21,13 @@ export const forms = {
   deleteFund: (formId, fundId) => api.delete(`/forms/${formId}/funds/${fundId}`),
 };
 
+export const letters = {
+  generateAll: (formId) => api.post(`/letters/${formId}/generate`),
+  generateOne: (formId, fundId) => api.post(`/letters/${formId}/generate/${fundId}`),
+  downloadUrl: (formId, filename) => `http://localhost:3001/api/letters/${formId}/download/${filename}`,
+  send: (formId, data) => api.post(`/letters/${formId}/send`, data),
+};
+
 export const documents = {
   upload: (form_id, file, doc_type) => {
     const fd = new FormData();

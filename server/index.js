@@ -9,6 +9,7 @@ app.use(express.json());
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/forms', require('./routes/forms'));
 app.use('/api/documents', require('./routes/documents'));
+app.use('/api/letters', require('./routes/letters'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
