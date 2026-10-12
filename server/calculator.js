@@ -37,17 +37,18 @@ function calculatePartA(data) {
   // 1. סכום מענק כולל
   const totalGrant = employer_grant + capital_severance + totalPensionSeverance;
 
-  // 2. מקסימום לרצף קצבה (default continuation ceiling)
-  //    = שנות ותק × משכורת חבות פיצויים
-  const maxPensionContinuation = seniority_years_effective * severance_obligation_salary;
+  // 2. מקסימום לרצף קצבה — לא יעלה על הסכום שהצטבר בפועל
+  const maxPensionContinuation = Math.min(
+    seniority_years_effective * severance_obligation_salary,
+    totalGrant
+  );
 
-  // 3. מקסימום לרצף פיצויים
-  //    = שנות ותק × משכורת חבות פיצויים + 4 × שכר ממוצע × שנות ותק
-  //    (capped — simplified formula per regulation)
-  const avgYearlySalary = TAX_CEILINGS.avgMarketSalaryMonthly * 12;
-  const maxSeveranceContinuation =
+  // 3. מקסימום לרצף פיצויים — לא יעלה על הסכום שהצטבר בפועל
+  const maxSeveranceContinuation = Math.min(
     (seniority_years_effective * severance_obligation_salary) +
-    (4 * TAX_CEILINGS.avgMarketSalaryMonthly * seniority_years_effective);
+    (4 * TAX_CEILINGS.avgMarketSalaryMonthly * seniority_years_effective),
+    totalGrant
+  );
 
   // 4. מענק פטור מירבי (סעיף 9(7א))
   //    = שנות ותק × מינימום(150% × משכורת אחרונה, תקרת הפטור השנתית)

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { forms, documents, letters } from '../api';
+import { calcYearsFromDates, formatYears } from '../lib/form161-calc';
 
 const STATUS_LABELS = {
   draft: 'טיוטה',
@@ -11,10 +12,10 @@ const STATUS_LABELS = {
 };
 
 const FUND_TYPES = {
-  pension_policy: 'קרן פנסיה / פוליסת ביטוח',
+  pension: 'קרן פנסיה (ק.פ.)',
+  insurance: 'ביטוח מנהלים (ב.מ.)',
+  gmul: 'קופת גמל',
   central_severance: 'קופה מרכזית לפיצויים',
-  insurance_pre2008: 'קופת גמל / פוליסה לפני 2008',
-  study_fund: 'קרן השתלמות',
 };
 
 const FUND_INSTRUCTIONS = {
@@ -38,7 +39,7 @@ export default function FormDetail() {
   const [signing, setSigning] = useState(null);
   const [signerName, setSignerName] = useState('');
   const [showAddFund, setShowAddFund] = useState(false);
-  const [newFund, setNewFund] = useState({ fund_name: '', fund_type: 'pension_policy', account_number: '', taxed_severance: '', untaxed_severance: '', contact_email: '' });
+  const [newFund, setNewFund] = useState({ fund_name: '', fund_type: 'pension', account_number: '', withholding_file: '', taxed_severance: '', untaxed_severance: '', contact_email: '' });
   const [generatingLetters, setGeneratingLetters] = useState(false);
   const [generatedLetters, setGeneratedLetters] = useState([]);
   const [showSendPanel, setShowSendPanel] = useState(false);
@@ -57,12 +58,13 @@ export default function FormDetail() {
       severance_obligation_salary: r.data.severance_obligation_salary || '',
       seniority_years: r.data.seniority_years || '',
       seniority_years_effective: r.data.seniority_years_effective || '',
-      employer_grant: r.data.employer_grant || '',
-      capital_severance: r.data.capital_severance || '',
-      pension_severance_taxed_nominal: r.data.pension_severance_taxed_nominal || '',
-      pension_severance_taxed_real: r.data.pension_severance_taxed_real || '',
+      employer_grant: r.data.employer_grant ?? '',
+      employer_withholding_file: r.data.employer_withholding_file || '',
+      capital_severance: r.data.capital_severance ?? '',
+      pension_severance_taxed_nominal: r.data.pension_severance_taxed_nominal ?? '',
+      pension_severance_taxed_real: r.data.pension_severance_taxed_real ?? '',
       pension_severance_untaxed: r.data.pension_severance_untaxed || '',
-      pre_retirement_pension: r.data.pre_retirement_pension || '',
+      pre_retirement_pension: r.data.pre_retirement_pension ?? '',
       notes: r.data.notes || '',
     });
     setPartB({
@@ -116,7 +118,7 @@ export default function FormDetail() {
   }
 
   async function addFund() {
-    try { await forms.addFund(id, newFund); setMsg('קרן נוספה'); setShowAddFund(false); setNewFund({ fund_name: '', fund_type: 'pension_policy', account_number: '', taxed_severance: '', untaxed_severance: '', contact_email: '' }); reload(); }
+    try { await forms.addFund(id, newFund); setMsg('קרן נוספה'); setShowAddFund(false); setNewFund({ fund_name: '', fund_type: 'pension', account_number: '', withholding_file: '', taxed_severance: '', untaxed_severance: '', contact_email: '' }); reload(); }
     catch (e) { setError(e.response?.data?.error || 'שגיאה'); }
   }
 
@@ -234,6 +236,21 @@ export default function FormDetail() {
       {tab === 'partA' && (
         <div className="card">
           <div className="card-title">חלק א — נתוני המעסיק</div>
+          {/* Auto-seniority hint */}
+          {data.start_date && data.end_date && (() => {
+            const computed = calcYearsFromDates(data.start_date, data.end_date);
+            return (
+              <div style={{ marginBottom: 12, padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, fontSize: '0.85rem', color: '#15803d', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>📅 ותק מחושב מהתאריכים: <b>{formatYears(computed)}</b> ({computed.toFixed(2)} שנים)</span>
+                {isEditable && (
+                  <button className="btn btn-sm" style={{ padding: '2px 10px', fontSize: '0.8rem', background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', borderRadius: 4, cursor: 'pointer' }}
+                    onClick={() => setPartA(p => ({ ...p, seniority_years: computed.toFixed(2), seniority_years_effective: computed.toFixed(2) }))}>
+                    מלא אוטומטית
+                  </button>
+                )}
+              </div>
+            );
+          })()}
           <div className="grid-2">
             {[
               ['last_salary', 'משכורת אחרונה (₪)'],
@@ -241,13 +258,22 @@ export default function FormDetail() {
               ['severance_obligation_salary', 'משכורת חבות פיצויים (₪)'],
               ['seniority_years', 'שנות ותק כולל חל"ת'],
               ['seniority_years_effective', 'שנות ותק אפקטיביות'],
-              ['employer_grant', 'מענק מהמעסיק (קוד 1) (₪)'],
             ].map(([k, label]) => (
               <div className="form-group" key={k}>
                 <label>{label}</label>
                 <input type="number" value={partA[k]} onChange={e => sf(k)(e.target.value)} disabled={!isEditable} />
               </div>
             ))}
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label>מענק מהמעסיק (קוד 1) (₪)</label>
+              <input type="number" value={partA.employer_grant} onChange={e => sf('employer_grant')(e.target.value)} disabled={!isEditable} placeholder="ריק אם אין" />
+            </div>
+            <div className="form-group">
+              <label>תיק ניכויים מעסיק</label>
+              <input value={partA.employer_withholding_file} onChange={e => sf('employer_withholding_file')(e.target.value)} disabled={!isEditable} dir="ltr" />
+            </div>
           </div>
           <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 16, marginTop: 4 }}>
             <div className="card-title" style={{ fontSize: '0.95rem', marginBottom: 12 }}>פיצויים הוניים (פוליסות/קופות לפני 2008)</div>
@@ -268,7 +294,7 @@ export default function FormDetail() {
               ].map(([k, label]) => (
                 <div className="form-group" key={k}>
                   <label>{label}</label>
-                  <input type="number" value={partA[k]} onChange={e => sf(k)(e.target.value)} disabled={!isEditable} />
+                  <input type="number" value={partA[k]} onChange={e => sf(k)(e.target.value)} disabled={!isEditable} placeholder="ריק אם לא רלוונטי" />
                 </div>
               ))}
             </div>
@@ -338,20 +364,24 @@ export default function FormDetail() {
                   </select>
                 </div>
                 <div className="form-group">
+                  <label>תיק ניכויים</label>
+                  <input value={newFund.withholding_file} onChange={e => sfn('withholding_file', e)} dir="ltr" placeholder="מספר תיק ניכויים" />
+                </div>
+                <div className="form-group">
                   <label>מספר חשבון</label>
-                  <input value={newFund.account_number} onChange={e => sfn('account_number', e)} />
+                  <input value={newFund.account_number} onChange={e => sfn('account_number', e)} dir="ltr" />
                 </div>
                 <div className="form-group">
-                  <label>אימייל לשליחת מכתב שחרור</label>
-                  <input type="email" value={newFund.contact_email} onChange={e => sfn('contact_email', e)} />
-                </div>
-                <div className="form-group">
-                  <label>פיצויים שמוסו (₪)</label>
-                  <input type="number" value={newFund.taxed_severance} onChange={e => sfn('taxed_severance', e)} />
+                  <label>פיצויים שמוסו (₪) — חלק קצבתי שמוסה מס</label>
+                  <input type="number" value={newFund.taxed_severance} onChange={e => sfn('taxed_severance', e)} placeholder="ריק אם לא רלוונטי" />
                 </div>
                 <div className="form-group">
                   <label>פיצויים שלא מוסו (₪)</label>
                   <input type="number" value={newFund.untaxed_severance} onChange={e => sfn('untaxed_severance', e)} />
+                </div>
+                <div className="form-group">
+                  <label>אימייל לשליחת מכתב שחרור</label>
+                  <input type="email" value={newFund.contact_email} onChange={e => sfn('contact_email', e)} dir="ltr" />
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -370,6 +400,7 @@ export default function FormDetail() {
                   <tr>
                     <th>שם הקרן</th>
                     <th>סוג</th>
+                    <th>תיק ניכויים</th>
                     <th>מוסו (₪)</th>
                     <th>לא מוסו (₪)</th>
                     <th>הנחיה</th>
@@ -380,8 +411,9 @@ export default function FormDetail() {
                   {data.pension_funds.map(f => (
                     <tr key={f.id}>
                       <td>{f.fund_name}{f.account_number ? <span style={{ color: '#888', fontSize: '0.8rem' }}> — {f.account_number}</span> : ''}</td>
-                      <td style={{ fontSize: '0.82rem', color: '#666' }}>{FUND_TYPES[f.fund_type]}</td>
-                      <td>{fmt(f.taxed_severance)}</td>
+                      <td style={{ fontSize: '0.82rem', color: '#666' }}>{FUND_TYPES[f.fund_type] || f.fund_type}</td>
+                      <td dir="ltr" style={{ fontSize: '0.82rem', color: '#555' }}>{f.withholding_file || '—'}</td>
+                      <td>{f.taxed_severance ? fmt(f.taxed_severance) : '—'}</td>
                       <td>{fmt(f.untaxed_severance)}</td>
                       <td>
                         {f.instruction
