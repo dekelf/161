@@ -8,20 +8,19 @@ export default function NewForm() {
   const preselectedEmployee = params.get('employee_id') || '';
 
   const [allEmployees, setAllEmployees] = useState([]);
-  const [form, setForm] = useState({ employee_id: preselectedEmployee, pension_fund: '', severance_amount: '', pension_amount: '', notes: '' });
+  const [employeeId, setEmployeeId] = useState(preselectedEmployee);
+  const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { employees.list().then(r => setAllEmployees(r.data)); }, []);
-
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
     setError('');
     setSaving(true);
     try {
-      const r = await forms.create(form);
+      const r = await forms.create({ employee_id: employeeId, notes });
       navigate(`/forms/${r.data.id}`);
     } catch (err) {
       setError(err.response?.data?.error || 'שגיאה');
@@ -29,6 +28,8 @@ export default function NewForm() {
       setSaving(false);
     }
   }
+
+  const selected = allEmployees.find(e => e.id === employeeId);
 
   return (
     <div style={{ maxWidth: 600 }}>
@@ -40,30 +41,27 @@ export default function NewForm() {
         <form onSubmit={submit}>
           <div className="form-group">
             <label>עובד *</label>
-            <select required value={form.employee_id} onChange={e => set('employee_id', e.target.value)}>
+            <select required value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
               <option value="">בחר עובד...</option>
               {allEmployees.map(e => (
                 <option key={e.id} value={e.id}>{e.name} — {e.id_number}</option>
               ))}
             </select>
           </div>
-          <div className="form-group">
-            <label>קרן פנסיה</label>
-            <input value={form.pension_fund} onChange={e => set('pension_fund', e.target.value)} placeholder="שם הקרן" />
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label>סכום פיצויים (₪)</label>
-              <input type="number" value={form.severance_amount} onChange={e => set('severance_amount', e.target.value)} />
+
+          {selected && (
+            <div style={{ background: '#f8f8f8', borderRadius: 6, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#555' }}>
+              <b>{selected.employer}</b>
+              {selected.employer_id && <span dir="ltr"> | ח.פ: {selected.employer_id}</span>}
+              {selected.company?.withholding_file && <span dir="ltr"> | תיק: {selected.company.withholding_file}</span>}
+              {selected.start_date && <span> | מ-{selected.start_date}</span>}
+              {selected.end_date && <span> עד {selected.end_date}</span>}
             </div>
-            <div className="form-group">
-              <label>סכום פנסיה (₪)</label>
-              <input type="number" value={form.pension_amount} onChange={e => set('pension_amount', e.target.value)} />
-            </div>
-          </div>
+          )}
+
           <div className="form-group">
             <label>הערות</label>
-            <textarea rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
+            <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'יוצר...' : 'צור טופס'}</button>
@@ -75,4 +73,3 @@ export default function NewForm() {
     </div>
   );
 }
-

@@ -3,6 +3,14 @@ import axios from 'axios';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 const api = axios.create({ baseURL: API_BASE });
 
+export const companies = {
+  list: () => api.get('/companies'),
+  get: (id) => api.get(`/companies/${id}`),
+  create: (data) => api.post('/companies', data),
+  update: (id, data) => api.put(`/companies/${id}`, data),
+  delete: (id) => api.delete(`/companies/${id}`),
+};
+
 export const employees = {
   list: () => api.get('/employees'),
   get: (id) => api.get(`/employees/${id}`),

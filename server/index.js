@@ -11,6 +11,7 @@ const allowedOrigins = process.env.CLIENT_URL
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 
+app.use('/api/companies', require('./routes/companies'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/forms', require('./routes/forms'));
 app.use('/api/documents', require('./routes/documents'));

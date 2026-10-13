@@ -7,7 +7,7 @@ router.get('/', async (req, res) => {
   try {
     const { data: employees, error } = await supabase
       .from('employees')
-      .select('*')
+      .select('*, company:company_id(id, name, company_number, withholding_file)')
       .order('name');
     if (error) throw error;
 
@@ -26,7 +26,10 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { data: employee, error } = await supabase
-      .from('employees').select('*').eq('id', req.params.id).single();
+      .from('employees')
+      .select('*, company:company_id(id, name, company_number, withholding_file)')
+      .eq('id', req.params.id)
+      .single();
     if (error || !employee) return res.status(404).json({ error: 'לא נמצא' });
 
     const { data: forms } = await supabase
@@ -40,7 +43,7 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, id_number, employer, employer_id, start_date, end_date } = req.body;
+  const { name, id_number, employer, employer_id, start_date, end_date, company_id } = req.body;
   if (!name || !id_number || !employer)
     return res.status(400).json({ error: 'שם, תעודת זהות ומעסיק הם שדות חובה' });
 
@@ -56,6 +59,7 @@ router.post('/', async (req, res) => {
       employer_id: employer_id || null,
       start_date: start_date || null,
       end_date: end_date || null,
+      company_id: company_id || null,
     });
     if (error) throw error;
     res.status(201).json({ id, name, id_number, employer });
@@ -83,6 +87,7 @@ router.put('/:id', async (req, res) => {
     if (employer_id !== undefined) updates.employer_id = employer_id;
     if (start_date !== undefined) updates.start_date = start_date || null;
     if (end_date !== undefined) updates.end_date = end_date || null;
+    if ('company_id' in req.body) updates.company_id = req.body.company_id || null;
 
     const { error } = await supabase.from('employees').update(updates).eq('id', req.params.id);
     if (error) throw error;

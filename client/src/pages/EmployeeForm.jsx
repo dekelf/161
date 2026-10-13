@@ -1,20 +1,45 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { employees } from '../api';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { employees, companies as companiesApi } from '../api';
 
 export default function EmployeeForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
-  const [form, setForm] = useState({ name: '', id_number: '', employer: '', employer_id: '', start_date: '', end_date: '', is_controlling_shareholder: 0 });
+
+  const [form, setForm] = useState({
+    name: '', id_number: '', employer: '', employer_id: '',
+    start_date: '', end_date: '', is_controlling_shareholder: 0,
+    company_id: '',
+  });
+  const [allCompanies, setAllCompanies] = useState([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => { companiesApi.list().then(r => setAllCompanies(r.data || [])); }, []);
+
   useEffect(() => {
-    if (isEdit) employees.get(id).then(r => setForm({ ...r.data, start_date: r.data.start_date || '', end_date: r.data.end_date || '', employer_id: r.data.employer_id || '' }));
+    if (isEdit) {
+      employees.get(id).then(r => setForm({
+        ...r.data,
+        start_date: r.data.start_date || '',
+        end_date: r.data.end_date || '',
+        employer_id: r.data.employer_id || '',
+        company_id: r.data.company_id || '',
+      }));
+    }
   }, [id]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  function selectCompany(companyId) {
+    set('company_id', companyId);
+    const c = allCompanies.find(c => c.id === companyId);
+    if (c) {
+      set('employer', c.name);
+      if (c.company_number) set('employer_id', c.company_number);
+    }
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -23,11 +48,10 @@ export default function EmployeeForm() {
     try {
       if (isEdit) {
         await employees.update(id, form);
-        navigate(`/employees`);
       } else {
-        const r = await employees.create(form);
-        navigate(`/employees`);
+        await employees.create(form);
       }
+      navigate('/employees');
     } catch (err) {
       setError(err.response?.data?.error || 'שגיאה');
     } finally {
@@ -44,6 +68,26 @@ export default function EmployeeForm() {
       <div className="card">
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={submit}>
+
+          {/* Company selector */}
+          <div className="form-group">
+            <label>חברה מעסיקה</label>
+            {allCompanies.length === 0 ? (
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>
+                אין חברות שמורות — <Link to="/companies">הוסיפי חברה</Link> תחילה, או מלאי שם מעסיק ידנית למטה.
+              </div>
+            ) : (
+              <select value={form.company_id} onChange={e => selectCompany(e.target.value)}>
+                <option value="">— בחרי חברה (ימלא אוטומטית) —</option>
+                {allCompanies.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.company_number ? ` | ח.פ ${c.company_number}` : ''}{c.withholding_file ? ` | תיק ${c.withholding_file}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
           <div className="grid-2">
             <div className="form-group">
               <label>שם מלא *</label>

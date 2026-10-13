@@ -5,6 +5,7 @@ import EmployeeForm from './pages/EmployeeForm';
 import FormList from './pages/FormList';
 import FormDetail from './pages/FormDetail';
 import NewForm from './pages/NewForm';
+import CompanyList from './pages/CompanyList';
 import './App.css';
 
 function Nav() {
@@ -15,6 +16,7 @@ function Nav() {
         <Link to="/">לוח בקרה</Link>
         <Link to="/employees">עובדים</Link>
         <Link to="/forms">טפסים</Link>
+        <Link to="/companies">חברות</Link>
       </div>
     </nav>
   );
@@ -34,6 +36,7 @@ export default function App() {
             <Route path="/forms" element={<FormList />} />
             <Route path="/forms/new" element={<NewForm />} />
             <Route path="/forms/:id" element={<FormDetail />} />
+            <Route path="/companies" element={<CompanyList />} />
           </Routes>
         </main>
       </div>
