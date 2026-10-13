@@ -113,11 +113,25 @@ router.patch('/:id', async (req, res) => {
       'elect_exempt_grant','elect_taxable_grant','elect_severance_continuation','elect_pension_continuation',
       'decl_no_parallel_employer','decl_no_prior_continuation','decl_no_entitlement_age',
       'part_c_alternative','part_c_tax_rate','part_c_notes','notes',
+      'employer_withholding_file',
     ];
+
+    const numericFields = new Set([
+      'last_salary','last_insured_salary','severance_obligation_salary',
+      'seniority_years','seniority_years_effective',
+      'employer_grant','capital_severance',
+      'pension_severance_taxed_nominal','pension_severance_taxed_real','pension_severance_untaxed',
+      'pre_retirement_pension','pre_retirement_pension_factor',
+      'elect_exempt_grant','elect_taxable_grant','elect_severance_continuation','elect_pension_continuation',
+      'part_c_tax_rate',
+    ]);
 
     const updates = { updated_at: new Date().toISOString() };
     for (const k of allowed) {
-      if (k in fields) updates[k] = fields[k];
+      if (k in fields) {
+        const v = fields[k];
+        updates[k] = (numericFields.has(k) && (v === '' || v === undefined)) ? null : v;
+      }
     }
     if (status) updates.status = status;
 
@@ -191,8 +205,10 @@ router.post('/:id/sign', async (req, res) => {
 });
 
 router.post('/:id/funds', async (req, res) => {
-  const { fund_name, fund_type, account_number, taxed_severance, untaxed_severance, employee_deposits, employer_deposits, contact_email } = req.body;
+  const { fund_name, fund_type, account_number, taxed_severance, untaxed_severance, employee_deposits, employer_deposits, contact_email, withholding_file } = req.body;
   if (!fund_name || !fund_type) return res.status(400).json({ error: 'שם וסוג קרן חובה' });
+
+  const toNum = v => (v === '' || v == null) ? 0 : Number(v);
 
   try {
     const { data: exists } = await supabase
@@ -203,11 +219,12 @@ router.post('/:id/funds', async (req, res) => {
     const { error } = await supabase.from('pension_funds').insert({
       id, form_id: req.params.id, fund_name, fund_type,
       account_number: account_number || null,
-      taxed_severance: taxed_severance || 0,
-      untaxed_severance: untaxed_severance || 0,
-      employee_deposits: employee_deposits || 0,
-      employer_deposits: employer_deposits || 0,
+      taxed_severance: toNum(taxed_severance),
+      untaxed_severance: toNum(untaxed_severance),
+      employee_deposits: toNum(employee_deposits),
+      employer_deposits: toNum(employer_deposits),
       contact_email: contact_email || null,
+      withholding_file: withholding_file || null,
     });
     if (error) throw error;
     await recalculate(req.params.id);
