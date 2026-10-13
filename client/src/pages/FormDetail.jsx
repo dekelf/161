@@ -29,6 +29,18 @@ const FUND_INSTRUCTIONS = {
 const fmt = (n) => n != null ? `₪${Number(n).toLocaleString('he-IL', { maximumFractionDigits: 0 })}` : '—';
 const pct = (n) => n != null ? `${(n * 100).toFixed(0)}%` : '—';
 
+const errStyle = { border: '1.5px solid #e74c3c', background: '#fff5f5' };
+
+function FieldGroup({ label, error, children }) {
+  return (
+    <div className="form-group">
+      <label style={error ? { color: '#e74c3c', fontWeight: 600 } : {}}>{label}{error ? ' ⚠️' : ''}</label>
+      {children}
+      {error && <div style={{ color: '#e74c3c', fontSize: '0.78rem', marginTop: 3 }}>{error}</div>}
+    </div>
+  );
+}
+
 export default function FormDetail() {
   const { id } = useParams();
   const [data, setData] = useState(null);
@@ -49,6 +61,7 @@ export default function FormDetail() {
   // Editable Part A fields
   const [partA, setPartA] = useState({});
   const [partB, setPartB] = useState({});
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const reload = () => forms.get(id).then(r => {
     setData(r.data);
@@ -86,7 +99,13 @@ export default function FormDetail() {
   const trackColor = data.track === 'green' ? '#27ae60' : data.track === 'red' ? '#e74c3c' : '#888';
 
   async function savePartA() {
-    setSaving(true); setError(''); setMsg('');
+    const errs = validatePartA();
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      setError('יש לתקן את השדות המסומנים לפני השמירה');
+      return;
+    }
+    setSaving(true); setError(''); setMsg(''); setFieldErrors({});
     try {
       await forms.update(id, partA);
       await forms.calculate(id);
@@ -118,6 +137,9 @@ export default function FormDetail() {
   }
 
   async function addFund() {
+    const errs = validateFund();
+    if (Object.keys(errs).length > 0) { setFieldErrors(errs); setError('יש לתקן את השדות המסומנים'); return; }
+    setFieldErrors({});
     try { await forms.addFund(id, newFund); setMsg('קרן נוספה'); setShowAddFund(false); setNewFund({ fund_name: '', fund_type: 'pension', account_number: '', withholding_file: '', taxed_severance: '', untaxed_severance: '', contact_email: '' }); reload(); }
     catch (e) { setError(e.response?.data?.error || 'שגיאה'); }
   }
@@ -159,9 +181,46 @@ export default function FormDetail() {
     } catch (e) { setError(e.response?.data?.error || 'שגיאה בשליחה'); }
   }
 
-  const sf = (k) => (v) => setPartA(p => ({ ...p, [k]: v }));
+  const sf = (k) => (v) => {
+    setPartA(p => ({ ...p, [k]: v }));
+    setFieldErrors(fe => { const { [k]: _, ...rest } = fe; return rest; });
+  };
   const sb = (k) => (v) => setPartB(p => ({ ...p, [k]: v }));
   const sfn = (k, e) => setNewFund(f => ({ ...f, [k]: e.target.value }));
+
+  function validatePartA() {
+    const errors = {};
+    const required = ['last_salary', 'last_insured_salary', 'severance_obligation_salary', 'seniority_years', 'seniority_years_effective'];
+    const requiredLabels = {
+      last_salary: 'משכורת אחרונה',
+      last_insured_salary: 'משכורת מבוטחת אחרונה',
+      severance_obligation_salary: 'משכורת חבות פיצויים',
+      seniority_years: 'שנות ותק כולל חל"ת',
+      seniority_years_effective: 'שנות ותק אפקטיביות',
+    };
+    for (const k of required) {
+      const v = partA[k];
+      if (v === '' || v == null) { errors[k] = `שדה חובה — יש למלא ${requiredLabels[k]}`; continue; }
+      if (isNaN(Number(v)) || Number(v) < 0) errors[k] = 'ערך לא תקין — יש להזין מספר חיובי';
+    }
+    const optionalNumeric = ['employer_grant', 'capital_severance', 'pension_severance_taxed_nominal', 'pension_severance_taxed_real', 'pension_severance_untaxed', 'pre_retirement_pension'];
+    for (const k of optionalNumeric) {
+      const v = partA[k];
+      if (v !== '' && v != null && (isNaN(Number(v)) || Number(v) < 0)) errors[k] = 'ערך לא תקין — יש להזין מספר חיובי או להשאיר ריק';
+    }
+    return errors;
+  }
+
+  function validateFund() {
+    const errors = {};
+    if (!newFund.fund_name.trim()) errors.fund_name = 'שם קרן חובה';
+    const numFields = ['taxed_severance', 'untaxed_severance'];
+    for (const k of numFields) {
+      const v = newFund[k];
+      if (v !== '' && v != null && (isNaN(Number(v)) || Number(v) < 0)) errors[k] = 'מספר חיובי בלבד';
+    }
+    return errors;
+  }
 
   const TABS = [
     { id: 'partA', label: 'חלק א — מעסיק' },
@@ -259,17 +318,15 @@ export default function FormDetail() {
               ['seniority_years', 'שנות ותק כולל חל"ת'],
               ['seniority_years_effective', 'שנות ותק אפקטיביות'],
             ].map(([k, label]) => (
-              <div className="form-group" key={k}>
-                <label>{label}</label>
-                <input type="number" value={partA[k]} onChange={e => sf(k)(e.target.value)} disabled={!isEditable} />
-              </div>
+              <FieldGroup key={k} label={label} error={fieldErrors[k]}>
+                <input type="number" value={partA[k]} onChange={e => sf(k)(e.target.value)} disabled={!isEditable} style={fieldErrors[k] ? errStyle : {}} />
+              </FieldGroup>
             ))}
           </div>
           <div className="grid-2">
-            <div className="form-group">
-              <label>מענק מהמעסיק (קוד 1) (₪)</label>
-              <input type="number" value={partA.employer_grant} onChange={e => sf('employer_grant')(e.target.value)} disabled={!isEditable} placeholder="ריק אם אין" />
-            </div>
+            <FieldGroup label="מענק מהמעסיק (קוד 1) (₪)" error={fieldErrors.employer_grant}>
+              <input type="number" value={partA.employer_grant} onChange={e => sf('employer_grant')(e.target.value)} disabled={!isEditable} placeholder="ריק אם אין" style={fieldErrors.employer_grant ? errStyle : {}} />
+            </FieldGroup>
             <div className="form-group">
               <label>תיק ניכויים מעסיק</label>
               <input value={partA.employer_withholding_file} onChange={e => sf('employer_withholding_file')(e.target.value)} disabled={!isEditable} dir="ltr" />
@@ -292,17 +349,15 @@ export default function FormDetail() {
                 ['pension_severance_taxed_real', 'מוסו — ערך ריאלי (₪)'],
                 ['pension_severance_untaxed', 'לא מוסו (₪)'],
               ].map(([k, label]) => (
-                <div className="form-group" key={k}>
-                  <label>{label}</label>
-                  <input type="number" value={partA[k]} onChange={e => sf(k)(e.target.value)} disabled={!isEditable} placeholder="ריק אם לא רלוונטי" />
-                </div>
+                <FieldGroup key={k} label={label} error={fieldErrors[k]}>
+                  <input type="number" value={partA[k]} onChange={e => sf(k)(e.target.value)} disabled={!isEditable} placeholder="ריק אם לא רלוונטי" style={fieldErrors[k] ? errStyle : {}} />
+                </FieldGroup>
               ))}
             </div>
             <div className="grid-2">
-              <div className="form-group">
-                <label>קצבה טרם הפרישה — סכום הומר (₪)</label>
-                <input type="number" value={partA.pre_retirement_pension} onChange={e => sf('pre_retirement_pension')(e.target.value)} disabled={!isEditable} />
-              </div>
+              <FieldGroup label="קצבה טרם הפרישה — סכום הומר (₪)" error={fieldErrors.pre_retirement_pension}>
+                <input type="number" value={partA.pre_retirement_pension} onChange={e => sf('pre_retirement_pension')(e.target.value)} disabled={!isEditable} placeholder="ריק אם לא רלוונטי" style={fieldErrors.pre_retirement_pension ? errStyle : {}} />
+              </FieldGroup>
             </div>
           </div>
           <div className="form-group">
@@ -353,10 +408,9 @@ export default function FormDetail() {
           {showAddFund && (
             <div style={{ marginBottom: 20, padding: 16, background: '#f8f9fa', borderRadius: 8 }}>
               <div className="grid-2">
-                <div className="form-group">
-                  <label>שם הקרן *</label>
-                  <input value={newFund.fund_name} onChange={e => sfn('fund_name', e)} />
-                </div>
+                <FieldGroup label="שם הקרן *" error={fieldErrors.fund_name}>
+                  <input value={newFund.fund_name} onChange={e => { sfn('fund_name', e); setFieldErrors(fe => { const { fund_name: _, ...r } = fe; return r; }); }} style={fieldErrors.fund_name ? errStyle : {}} />
+                </FieldGroup>
                 <div className="form-group">
                   <label>סוג *</label>
                   <select value={newFund.fund_type} onChange={e => sfn('fund_type', e)}>
@@ -371,14 +425,12 @@ export default function FormDetail() {
                   <label>מספר חשבון</label>
                   <input value={newFund.account_number} onChange={e => sfn('account_number', e)} dir="ltr" />
                 </div>
-                <div className="form-group">
-                  <label>פיצויים שמוסו (₪) — חלק קצבתי שמוסה מס</label>
-                  <input type="number" value={newFund.taxed_severance} onChange={e => sfn('taxed_severance', e)} placeholder="ריק אם לא רלוונטי" />
-                </div>
-                <div className="form-group">
-                  <label>פיצויים שלא מוסו (₪)</label>
-                  <input type="number" value={newFund.untaxed_severance} onChange={e => sfn('untaxed_severance', e)} />
-                </div>
+                <FieldGroup label="פיצויים שמוסו (₪) — חלק קצבתי שמוסה מס" error={fieldErrors.taxed_severance}>
+                  <input type="number" value={newFund.taxed_severance} onChange={e => { sfn('taxed_severance', e); setFieldErrors(fe => { const { taxed_severance: _, ...r } = fe; return r; }); }} placeholder="ריק אם לא רלוונטי" style={fieldErrors.taxed_severance ? errStyle : {}} />
+                </FieldGroup>
+                <FieldGroup label="פיצויים שלא מוסו (₪)" error={fieldErrors.untaxed_severance}>
+                  <input type="number" value={newFund.untaxed_severance} onChange={e => { sfn('untaxed_severance', e); setFieldErrors(fe => { const { untaxed_severance: _, ...r } = fe; return r; }); }} style={fieldErrors.untaxed_severance ? errStyle : {}} />
+                </FieldGroup>
                 <div className="form-group">
                   <label>אימייל לשליחת מכתב שחרור</label>
                   <input type="email" value={newFund.contact_email} onChange={e => sfn('contact_email', e)} dir="ltr" />
@@ -386,7 +438,7 @@ export default function FormDetail() {
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-success" onClick={addFund}>הוסף</button>
-                <button className="btn btn-outline" onClick={() => setShowAddFund(false)}>ביטול</button>
+                <button className="btn btn-outline" onClick={() => { setShowAddFund(false); setFieldErrors({}); }}>ביטול</button>
               </div>
             </div>
           )}
