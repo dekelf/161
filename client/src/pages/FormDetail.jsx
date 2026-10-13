@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { forms, documents, letters } from '../api';
 import { calcYearsFromDates, formatYears } from '../lib/form161-calc';
+import FundSearch from '../components/FundSearch';
 
 const STATUS_LABELS = {
   draft: 'טיוטה',
@@ -409,7 +410,23 @@ export default function FormDetail() {
             <div style={{ marginBottom: 20, padding: 16, background: '#f8f9fa', borderRadius: 8 }}>
               <div className="grid-2">
                 <FieldGroup label="שם הקרן *" error={fieldErrors.fund_name}>
-                  <input value={newFund.fund_name} onChange={e => { sfn('fund_name', e); setFieldErrors(fe => { const { fund_name: _, ...r } = fe; return r; }); }} style={fieldErrors.fund_name ? errStyle : {}} />
+                  <FundSearch
+                    value={newFund.fund_name}
+                    hasError={!!fieldErrors.fund_name}
+                    onChange={name => {
+                      setNewFund(f => ({ ...f, fund_name: name }));
+                      setFieldErrors(fe => { const { fund_name: _, ...r } = fe; return r; });
+                    }}
+                    onSelect={fund => {
+                      setNewFund(f => ({
+                        ...f,
+                        fund_name: fund.name,
+                        withholding_file: fund.withholding_file,
+                        fund_type: fund.fund_type,
+                      }));
+                      setFieldErrors(fe => { const { fund_name: _, ...r } = fe; return r; });
+                    }}
+                  />
                 </FieldGroup>
                 <div className="form-group">
                   <label>סוג *</label>
@@ -418,7 +435,7 @@ export default function FormDetail() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>תיק ניכויים</label>
+                  <label>תיק ניכויים{newFund.withholding_file && newFund.fund_name && <span style={{ fontWeight: 400, color: '#15803d', fontSize: '0.8rem', marginRight: 6 }}>(מולא אוטומטית)</span>}</label>
                   <input value={newFund.withholding_file} onChange={e => sfn('withholding_file', e)} dir="ltr" placeholder="מספר תיק ניכויים" />
                 </div>
                 <div className="form-group">
