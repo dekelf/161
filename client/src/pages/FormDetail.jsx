@@ -72,7 +72,7 @@ export default function FormDetail() {
       seniority_years: r.data.seniority_years || '',
       seniority_years_effective: r.data.seniority_years_effective || '',
       employer_grant: r.data.employer_grant ?? '',
-      employer_withholding_file: r.data.employer_withholding_file || '',
+      employer_withholding_file: r.data.employer_withholding_file || r.data.company_withholding_file || '',
       capital_severance: r.data.capital_severance ?? '',
       pension_severance_taxed_nominal: r.data.pension_severance_taxed_nominal ?? '',
       pension_severance_taxed_real: r.data.pension_severance_taxed_real ?? '',
@@ -328,8 +328,8 @@ export default function FormDetail() {
               <input type="number" value={partA.employer_grant} onChange={e => sf('employer_grant')(e.target.value)} disabled={!isEditable} placeholder="ריק אם אין" style={fieldErrors.employer_grant ? errStyle : {}} />
             </FieldGroup>
             <div className="form-group">
-              <label>תיק ניכויים מעסיק</label>
-              <input value={partA.employer_withholding_file} onChange={e => sf('employer_withholding_file')(e.target.value)} disabled={!isEditable} dir="ltr" />
+              <label>תיק ניכויים מעסיק{data.company_withholding_file ? <span style={{ fontWeight: 400, color: '#15803d', fontSize: '0.8rem', marginRight: 6 }}>(ממוחברת)</span> : ''}</label>
+              <input value={partA.employer_withholding_file} onChange={e => sf('employer_withholding_file')(e.target.value)} disabled={!isEditable} dir="ltr" placeholder="מתמלא אוטומטית מהחברה" />
             </div>
           </div>
           <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 16, marginTop: 4 }}>

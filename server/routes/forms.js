@@ -34,7 +34,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { data: form, error } = await supabase
       .from('forms')
-      .select('*, employees(name, id_number, employer, employer_id, start_date, end_date, is_controlling_shareholder)')
+      .select('*, employees(name, id_number, employer, employer_id, start_date, end_date, is_controlling_shareholder, company:company_id(name, company_number, withholding_file))')
       .eq('id', req.params.id)
       .single();
     if (error || !form) return res.status(404).json({ error: 'לא נמצא' });
@@ -47,11 +47,14 @@ router.get('/:id', async (req, res) => {
 
     const emp = form.employees || {};
     const { employees: _, ...rest } = form;
+    const company = emp.company || {};
     res.json({
       ...rest,
       employee_name: emp.name, id_number: emp.id_number, employer: emp.employer,
       employer_id: emp.employer_id, start_date: emp.start_date, end_date: emp.end_date,
       is_controlling_shareholder: emp.is_controlling_shareholder,
+      company_withholding_file: company.withholding_file || null,
+      company_number: company.company_number || emp.employer_id || null,
       signatures: sigsRes.data || [],
       pension_funds: fundsRes.data || [],
       audit: auditRes.data || [],
@@ -66,7 +69,10 @@ router.post('/', async (req, res) => {
   if (!employee_id) return res.status(400).json({ error: 'employee_id חסר' });
 
   try {
-    const { data: employee } = await supabase.from('employees').select('*').eq('id', employee_id).single();
+    const { data: employee } = await supabase
+      .from('employees')
+      .select('*, company:company_id(name, company_number, withholding_file)')
+      .eq('id', employee_id).single();
     if (!employee) return res.status(404).json({ error: 'עובד לא נמצא' });
 
     const { data: activeForm } = await supabase
@@ -79,7 +85,10 @@ router.post('/', async (req, res) => {
     const id = uuidv4();
     const form_number = 'F161-' + Date.now().toString().slice(-7);
 
-    const { error } = await supabase.from('forms').insert({ id, employee_id, form_number });
+    // pre-fill company details
+    const employer_withholding_file = employee.company?.withholding_file || employee.employer_id || null;
+
+    const { error } = await supabase.from('forms').insert({ id, employee_id, form_number, employer_withholding_file });
     if (error) throw error;
 
     await supabase.from('signatures').insert([
