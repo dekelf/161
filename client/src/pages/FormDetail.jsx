@@ -252,6 +252,7 @@ export default function FormDetail() {
           {data.status === 'draft' && isEditable && (
             <button className="btn btn-primary" onClick={() => changeStatus('waiting_employee')}>שלח לחתימת עובד</button>
           )}
+          <button className="btn btn-outline btn-sm" onClick={() => window.open(`/forms/${id}/print`, '_blank')}>🖨️ הדפס / הורד PDF</button>
           {data.status !== 'rejected' && data.status !== 'completed' && (
             <button className="btn btn-danger btn-sm" onClick={() => changeStatus('rejected')}>דחה</button>
           )}

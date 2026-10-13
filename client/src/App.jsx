@@ -6,6 +6,7 @@ import FormList from './pages/FormList';
 import FormDetail from './pages/FormDetail';
 import NewForm from './pages/NewForm';
 import CompanyList from './pages/CompanyList';
+import FormPrint from './pages/FormPrint';
 import './App.css';
 
 function Nav() {
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/forms/new" element={<NewForm />} />
             <Route path="/forms/:id" element={<FormDetail />} />
             <Route path="/companies" element={<CompanyList />} />
+            <Route path="/forms/:id/print" element={<FormPrint />} />
           </Routes>
         </main>
       </div>

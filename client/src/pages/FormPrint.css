@@ -1,0 +1,313 @@
+/* FormPrint.css — A4 print styles for Form 161 */
+
+.fp-loading {
+  padding: 40px;
+  text-align: center;
+  font-size: 1.1rem;
+  color: #888;
+}
+
+.fp-root {
+  font-family: 'Arial', 'David', sans-serif;
+  font-size: 11px;
+  color: #111;
+  direction: rtl;
+  background: white;
+}
+
+/* ── Page container ── */
+.fp-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 14mm 16mm 14mm 16mm;
+  box-sizing: border-box;
+  background: white;
+  page-break-after: always;
+  page-break-inside: avoid;
+}
+.fp-page:last-child {
+  page-break-after: auto;
+}
+
+/* ── Header ── */
+.fp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #1a1a2e;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+}
+.fp-form-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+.fp-form-sub {
+  font-size: 12px;
+  color: #444;
+  margin-top: 2px;
+}
+.fp-header-meta {
+  font-size: 10px;
+  color: #555;
+  text-align: left;
+  line-height: 1.7;
+}
+.fp-page-header-small {
+  font-size: 10px;
+  color: #666;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 5px;
+  margin-bottom: 12px;
+}
+
+/* ── Sections ── */
+.fp-section {
+  margin-bottom: 14px;
+  border: 1px solid #c8d0db;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.fp-section-title {
+  background: #1a1a2e;
+  color: white;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 5px 10px;
+}
+.fp-subsection-title {
+  background: #e8ecf0;
+  font-weight: 600;
+  font-size: 10px;
+  padding: 4px 10px;
+  color: #333;
+  border-top: 1px solid #c8d0db;
+}
+.fp-section-calc {
+  background: #f0f9ff;
+}
+.fp-section-calc .fp-section-title {
+  background: #0369a1;
+}
+
+/* ── Field grid ── */
+.fp-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+}
+.fp-field {
+  padding: 6px 10px;
+  border-left: 1px solid #e8ecf0;
+  border-bottom: 1px solid #e8ecf0;
+}
+.fp-field:last-child {
+  border-left: none;
+}
+.fp-field-label {
+  font-size: 9px;
+  color: #666;
+  margin-bottom: 2px;
+}
+.fp-field-value {
+  font-size: 12px;
+  font-weight: 500;
+  min-height: 16px;
+}
+.fp-bold {
+  font-weight: 700;
+  font-size: 13px;
+}
+.fp-empty-val {
+  color: #bbb;
+}
+
+/* ── Tables ── */
+.fp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5px;
+}
+.fp-table th {
+  background: #e8ecf0;
+  color: #333;
+  font-weight: 700;
+  padding: 5px 6px;
+  border: 1px solid #c8d0db;
+  text-align: right;
+}
+.fp-table td {
+  padding: 4px 6px;
+  border: 1px solid #e0e0e0;
+  vertical-align: middle;
+}
+.fp-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+.fp-tfoot td {
+  font-weight: 700;
+  background: #f0f9ff;
+  border-top: 2px solid #c8d0db;
+}
+.fp-table-sm {
+  font-size: 9px;
+}
+
+/* ── Track ── */
+.fp-track {
+  margin: 8px 10px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.fp-track-green {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+}
+.fp-track-red {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+.fp-track-reason {
+  font-weight: 400;
+  font-size: 10px;
+  margin-top: 3px;
+}
+
+/* ── Declarations ── */
+.fp-declarations {
+  padding: 6px 10px 8px;
+}
+.fp-decl-title {
+  font-weight: 600;
+  font-size: 10px;
+  color: #444;
+  margin-bottom: 5px;
+}
+.fp-decl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  margin-bottom: 3px;
+}
+.fp-checkbox {
+  font-size: 13px;
+}
+
+/* ── Signatures ── */
+.fp-sig-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px 10px;
+}
+.fp-sig-box {
+  border: 1px solid #c8d0db;
+  border-radius: 4px;
+  padding: 10px 14px;
+  min-height: 70px;
+}
+.fp-sig-type {
+  font-weight: 700;
+  font-size: 11px;
+  color: #333;
+  margin-bottom: 6px;
+}
+.fp-sig-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+.fp-sig-date {
+  font-size: 9px;
+  color: #888;
+  margin-top: 2px;
+}
+.fp-sig-stamp {
+  color: #15803d;
+  font-weight: 700;
+  font-size: 11px;
+  margin-top: 4px;
+}
+.fp-sig-line {
+  border-bottom: 1px solid #999;
+  margin-top: 30px;
+}
+
+/* ── Notes / Footer ── */
+.fp-notes {
+  padding: 8px 10px;
+  font-size: 10px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.fp-footer {
+  font-size: 9px;
+  color: #aaa;
+  text-align: center;
+  margin-top: 14px;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 6px;
+}
+.fp-empty {
+  padding: 10px;
+  color: #888;
+  font-size: 10px;
+}
+
+/* ── Print media ── */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  body {
+    margin: 0;
+  }
+  .fp-root {
+    background: white;
+  }
+  .fp-page {
+    page-break-after: always;
+    box-shadow: none;
+  }
+  nav, .nav, .main-content > *:not(.fp-root) {
+    display: none !important;
+  }
+}
+
+/* ── Screen preview (non-print) ── */
+@media screen {
+  body {
+    background: #e0e0e0;
+  }
+  .fp-root {
+    background: transparent;
+  }
+  .fp-page {
+    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+    margin: 20px auto;
+    background: white;
+  }
+  .fp-print-btn {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    background: #1a1a2e;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .fp-print-btn:hover {
+    background: #2d2d5a;
+  }
+}
